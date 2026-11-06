@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+.venv
+
+# Cache & Temporary Storage
+cache/
+backend/cache/
+.chrome_dev_profile/
+scratch/
+
+# Environment Secrets (Tuyệt đối không đẩy API keys lên Git)
+.env
+backend/.env
+*.env.local
+
+# Node & Extension Build artifacts
+node_modules/
+extension/node_modules/
+.output/
+extension/.output/
+.wxt/
+extension/.wxt/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Large Binary & Local Model Files
+*.onnx
+*.onnx.json
+*.wav
+*.mp3
+
