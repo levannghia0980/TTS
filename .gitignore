@@ -53,6 +53,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+~$*
 
 # Large Binary & Local Model Files
 *.onnx

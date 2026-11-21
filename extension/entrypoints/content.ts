@@ -264,12 +264,17 @@ export default defineContentScript({
       }
 
       // ĐỒNG BỘ 100% GIỮA HIỂN THỊ DOM VÀ TTS:
-      // Chia nhỏ từng block thành các vế câu (<= 120 ký tự), gắn thẻ span có data-tts-sid
+      // Chia nhỏ từng block theo thể loại ('story' vs 'general') và động cơ giọng đang dùng
+      const selectedVoice = conf?.selected_voice || 'BV074_streaming';
+      const domVoiceHint = detectedLang === 'vi' ? selectedVoice : undefined;
       const sessionChunks: any[] = [];
       let globalIdx = 0;
 
       blocks.forEach((b) => {
-        const clauses = splitTextIntoChunks(b.text, 120);
+        const clauses = splitTextIntoChunks(b.text, {
+          profile: detectedProfile,
+          voiceId: domVoiceHint,
+        });
         const blockChunks: { sid: string; text: string }[] = [];
 
         clauses.forEach((cText) => {

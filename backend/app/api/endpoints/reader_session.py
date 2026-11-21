@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 from app.services.session_manager import session_manager
+from app.services.text_segmenter import resolve_segmenter_config, split_into_chunks
 from app.constants.voices import get_male_voice_for_lang
 
 router = APIRouter(prefix="/session", tags=["Reader Session"])
@@ -41,28 +42,22 @@ async def start_session(req: StartSessionRequest):
     - Không đợi dịch, tạo ngay audio bản gốc cho câu 0 & 1 (<0.5s).
     - Hỗ trợ chuyển sang bản dịch tiếng Việt tức thì mà không cần nạp lại trang.
     """
-    # Tách các khối văn bản (blocks) thành từng câu/vế câu hoàn chỉnh
-    sentences_data = []
-    import re
+    # Tự động chọn giọng nam cho ngôn ngữ trang nếu chưa chỉ định
+    chosen_orig_voice = req.orig_voice_id or get_male_voice_for_lang(req.lang or "en")
+    chosen_vi_voice = req.vi_voice_id or req.voice_id
 
-    def split_sub_clauses(text: str, max_chars: int = 120) -> List[str]:
-        if len(text) <= max_chars:
-            return [text]
-        parts = re.split(r'([,;:—–\-\,\;\:\，\；\：]+|\s+(?:và|nhưng|mà|cùng|hoặc|and|but|or|while)\s+)', text)
-        chunks = []
-        cur = ""
-        for p in parts:
-            if not p:
-                continue
-            if len(cur + p) <= max_chars:
-                cur += p
-            else:
-                if cur.strip():
-                    chunks.append(cur.strip())
-                cur = p
-        if cur.strip():
-            chunks.append(cur.strip())
-        return [c for c in chunks if len(c) > 1] or [text]
+    # Tự động nhận diện profile (truyện vs thông tin tổng hợp/báo chí) qua URL hoặc frontend
+    chosen_profile = req.profile or "general"
+    if chosen_profile == "general" and req.page_url:
+        import re
+        story_patterns = r'(truyen|novel|fiction|wattpad|qidian|faloo|biquge|69shu|uukanshu|syosetu|kakuyomu|ao3|archiveofourown|royalroad|wuxiaworld|chivi|wikidich|tangthuvien|metruyenchu|sangtacviet|bachngocsach|truyenfull|\/chuong[-_/]?\d+|\/chap(?:ter)?[-_/]?\d+|\/story\/|\/book\/)'
+        if re.search(story_patterns, req.page_url, re.IGNORECASE):
+            chosen_profile = "story"
+
+    raw_seg_cfg = resolve_segmenter_config(profile=chosen_profile, voice_id=chosen_orig_voice)
+
+    # Tách các khối văn bản (blocks) thành từng chunk ngữ điệu hoàn chỉnh bằng PTS
+    sentences_data = []
 
     for b_idx, block in enumerate(req.blocks):
         raw_text = block.get("text", "").strip()
@@ -80,38 +75,20 @@ async def start_session(req: StartSessionRequest):
             })
             continue
 
-        # Nếu block chưa chia nhỏ: tách theo dấu kết thúc câu (. ! ? … \n hoặc 。！？)
-        segs = re.split(r'(?<=[.?!…\n。！？])\s+', raw_text)
-        for seg in segs:
-            seg_clean = seg.strip()
-            if len(seg_clean) > 1:
-                # Nếu câu dài hơn 120 ký tự: cắt tiếp theo dấu giữa câu (phẩy, chấm phẩy...)
-                sub_parts = split_sub_clauses(seg_clean, max_chars=120)
-                for sub_p in sub_parts:
-                    sub_clean = sub_p.strip()
-                    if len(sub_clean) > 1:
-                        new_sid = f"s-{len(sentences_data)}"
-                        sentences_data.append({
-                            "original": sub_clean,
-                            "translated": sub_clean if (blk_lang == "vi" or req.lang == "vi") else "",
-                            "xid": xid,
-                            "sid": new_sid
-                        })
+        # Nếu block chưa chia nhỏ: dùng Prosody-aware Text Segmenter thích ứng thể loại & engine
+        for chunk_text in split_into_chunks(raw_text, cfg=raw_seg_cfg):
+            sub_clean = chunk_text.strip()
+            if sub_clean:
+                new_sid = f"s-{len(sentences_data)}"
+                sentences_data.append({
+                    "original": sub_clean,
+                    "translated": sub_clean if (blk_lang == "vi" or req.lang == "vi") else "",
+                    "xid": xid,
+                    "sid": new_sid
+                })
 
     if not sentences_data:
         raise HTTPException(status_code=400, detail="Không có nội dung văn bản nào để đọc.")
-
-    # Tự động chọn giọng nam cho ngôn ngữ trang nếu chưa chỉ định
-    chosen_orig_voice = req.orig_voice_id or get_male_voice_for_lang(req.lang or "en")
-    chosen_vi_voice = req.vi_voice_id or req.voice_id
-
-    # Tự động nhận diện profile (truyện vs thông tin tổng hợp/báo chí) qua URL hoặc frontend
-    chosen_profile = req.profile or "general"
-    if chosen_profile == "general" and req.page_url:
-        import re
-        story_patterns = r'(truyen|novel|fiction|wattpad|qidian|faloo|biquge|69shu|uukanshu|syosetu|kakuyomu|ao3|archiveofourown|royalroad|wuxiaworld|chivi|wikidich|tangthuvien|metruyenchu|sangtacviet|bachngocsach|truyenfull|\/chuong[-_/]?\d+|\/chap(?:ter)?[-_/]?\d+|\/story\/|\/book\/)'
-        if re.search(story_patterns, req.page_url, re.IGNORECASE):
-            chosen_profile = "story"
 
     session = session_manager.create_session(
         session_id=req.session_id,

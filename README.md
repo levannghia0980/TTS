@@ -25,6 +25,11 @@ Hệ sinh thái đọc văn bản song ngữ thông minh tích hợp **Chrome Ex
    * **CapCut / TikTok TTS:** Giọng nam trầm ấm review (`BV074_streaming`), giọng nữ truyền cảm (`BV075_streaming`).
    * **Microsoft Edge-TTS:** Giọng phát thanh viên chuẩn mực (`vi-VN-HoaiMyNeural`, `vi-VN-NamMinhNeural`).
    * **Piper VITS (ONNX Runtime):** Giọng đọc nữ miền Bắc (*Ngọc Huyền New*) chạy ngoại tuyến 100% không cần kết nối Internet.
+6. **Phân đoạn văn bản thích ứng đa thể loại & ưu tiên ngữ điệu (PTS — Prosody-aware Text Segmenter):**
+   * Thuật toán NLP 4 tầng chạy đồng nhất 100% giữa **TypeScript** ([`extension/src/content/nlp/segmenter.ts`](extension/src/content/nlp/segmenter.ts)) và **Python** ([`backend/app/services/text_segmenter.py`](backend/app/services/text_segmenter.py)).
+   * **Ưu tiên ngữ điệu thay vì chia đều máy móc:** Không bao giờ cắt ngang giữa cụm từ hay chia đôi câu máy móc khi câu có dấu câu/liên từ hợp lệ trong ngưỡng $L_{\max}$; cực tiểu hóa số vết ngắt giả để giọng TTS không khựng giữa chừng.
+   * **Thích ứng đa thể loại & động cơ TTS:** Tự động điều chỉnh chế độ chunk theo **thể loại** (`story` gộp thoại cảm thán siêu ngắn, bảo vệ trích dẫn; `general` giữ ranh giới mệnh đề logic và cụm thuật ngữ trong ngoặc) và **động cơ phát** (`CapCut` $120$, `Piper ONNX` $160$, `Microsoft Edge` $220$ ký tự).
+   * Đánh giá thực nghiệm trên 3 kho ngữ liệu **Universal Dependencies** (`vi_vtb`, `en_ewt`, `zh_gsdsimp`): giảm gần **3 lần** tỉ lệ cắt đứt cụm phụ thuộc chặt (`10.45%` so với `29.50%` của regex cũ), đạt **95.08%** ranh giới mệnh đề/dấu câu (**100.00%** trên `vi_vtb` $L_{\max}=120$), và **100.00% parity** qua 321 ca $\times$ 4 chế độ thích ứng (xem chi tiết tại [`research/segmentation/REPORT.md`](research/segmentation/REPORT.md)).
 
 ---
 
@@ -37,16 +42,18 @@ texttospeech/
 │   │   ├── api/v1/           # REST API endpoints (session, tts, settings)
 │   │   ├── constants/        # Danh mục giọng đọc đa ngôn ngữ
 │   │   ├── core/             # Cấu hình Settings và biến môi trường
-│   │   └── services/         # Logic lõi: Session, TTS, Translation, Cache
+│   │   └── services/         # Logic lõi: Session, TTS, Translation, Cache, text_segmenter.py
 │   ├── requirements.txt      # Thư viện Python phụ thuộc
 │   └── run.py                # Điểm khởi chạy FastAPI Server (Port 8000)
 ├── extension/                # Chrome Extension (WXT + TypeScript + Vite)
 │   ├── entrypoints/          # Background script, Content script, Popup
 │   ├── src/
-│   │   ├── content/          # Trích xuất DOM (Walker, Cleaner, Injector)
+│   │   ├── content/          # Trích xuất DOM, injector, nlp/segmenter.ts
 │   │   └── sidepanel/        # Audio Queue Player (Double Buffering)
 │   ├── package.json          # Node dependencies
 │   └── wxt.config.ts         # Cấu hình WXT Build Manifest V3
+├── research/
+│   └── segmentation/         # Thực nghiệm NLP (UD vi/en/zh, baselines, parity check)
 ├── .env.example              # File mẫu cấu hình môi trường
 └── README.md                 # Hướng dẫn chi tiết
 ```
@@ -128,7 +135,7 @@ texttospeech/
    * Mở trình duyệt Chrome và truy cập đường dẫn: `chrome://extensions/`
    * Bật công tắc **Chế độ dành cho nhà phát triển (Developer mode)** ở góc trên bên phải.
    * Bấm nút **Tải tiện ích đã giải nén (Load unpacked)**.
-   * Chọn thư mục: `d:\V_kì_I\texttospeech\extension\.output\chrome-mv3`.
+   * Chọn thư mục: `extension/.output/chrome-mv3` trong dự án.
 
 ---
 

@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.services.capcut_api.client import CapCutClient
 from app.services.capcut_api.models import DeviceConfig
+from app.services.text_segmenter import resolve_segmenter_config, split_into_chunks
 
 
 def strip_leading_numbering(text: str) -> str:
@@ -36,49 +37,18 @@ def strip_leading_numbering(text: str) -> str:
     return t
 
 
-def split_sub_chunks(text: str, max_chars: int = 120) -> List[str]:
+def split_sub_chunks(
+    text: str,
+    max_chars: Optional[int] = None,
+    profile: str = "general",
+    voice_id: Optional[str] = None,
+) -> List[str]:
     """
-    Cắt các câu dài theo dấu câu ở giữa câu (phẩy, chấm phẩy, gạch ngang, liên từ)
-    để đảm bảo CapCut TTS không bao giờ bị quá tải hoặc từ chối request.
+    Phân đoạn câu dài bằng Prosody-aware Text Segmenter thích ứng theo thể loại
+    ('story' / 'general') và loại giọng TTS ('capcut' / 'edge' / 'local').
     """
-    if not text or len(text) <= max_chars:
-        return [text] if text else []
-
-    # Cắt theo dấu phẩy, chấm phẩy, hai chấm, gạch ngang hoặc liên từ
-    parts = re.split(r'([,;:—–\-]|\s+(?:và|nhưng|mà|cùng|hoặc)\s+)', text)
-    chunks = []
-    current = ""
-    for p in parts:
-        if not p:
-            continue
-        if len(current) + len(p) <= max_chars:
-            current += p
-        else:
-            if current.strip():
-                chunks.append(current.strip())
-            current = p
-    if current.strip():
-        chunks.append(current.strip())
-
-    # Nếu vẫn còn mẩu nào dài hơn max_chars (câu dài không có dấu câu), cắt theo từ
-    final_chunks = []
-    for c in chunks:
-        if len(c) <= max_chars:
-            final_chunks.append(c)
-        else:
-            words = c.split()
-            w_buf = ""
-            for w in words:
-                if len(w_buf) + len(w) + 1 <= max_chars:
-                    w_buf = f"{w_buf} {w}".strip()
-                else:
-                    if w_buf:
-                        final_chunks.append(w_buf)
-                    w_buf = w
-            if w_buf:
-                final_chunks.append(w_buf)
-
-    return final_chunks if final_chunks else [text]
+    cfg = resolve_segmenter_config(profile=profile, voice_id=voice_id, max_chars=max_chars)
+    return split_into_chunks(text, cfg=cfg)
 
 
 _LOCAL_PIPER_VOICE = None
@@ -242,11 +212,18 @@ class TTSService:
         return None
 
     @classmethod
-    async def synthesize_bytes(cls, text: str, voice_id: Optional[str] = None, speed: float = 1.0) -> Optional[bytes]:
+    async def synthesize_bytes(
+        cls,
+        text: str,
+        voice_id: Optional[str] = None,
+        speed: float = 1.0,
+        profile: str = "general",
+    ) -> Optional[bytes]:
         """
         Tổng hợp âm thanh trả về bytes nhị phân MP3 hoàn chỉnh.
-        Tự động cắt sub-chunk câu dài theo dấu câu và GHÉP NỐI âm thanh,
-        KHÓA CỨNG 100% đúng giọng người dùng chọn, tuyệt đối không nhảy giọng bừa bãi.
+        Tự động phân đoạn thích ứng theo thể loại (`story` / `general`) và động cơ TTS
+        (`capcut`: 120, `local`: 160, `edge`: 220) rồi ghép nối mượt mà,
+        KHÓA CỨNG 100% đúng giọng người dùng chọn.
         """
         clean_text = strip_leading_numbering(text)
         if not clean_text:
@@ -260,8 +237,8 @@ class TTSService:
 
         is_edge = "Neural" in voice or voice.startswith("vi-VN-") or voice in ("hoaimy", "namminh")
 
-        # Cắt sub-chunks nếu câu dài
-        sub_chunks = split_sub_chunks(clean_text, max_chars=120)
+        # Cắt sub-chunks thích ứng theo thể loại & TTS engine (Edge 220, CapCut 120)
+        sub_chunks = split_sub_chunks(clean_text, profile=profile, voice_id=voice)
         audio_parts: List[bytes] = []
 
         for sub in sub_chunks:

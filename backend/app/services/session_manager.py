@@ -249,7 +249,7 @@ class ReaderSession:
 
                 item.orig_status = "synthesizing"
                 audio = await TTSService.synthesize_bytes(
-                    item.original, voice_id=self.orig_voice_id, speed=self.speed
+                    item.original, voice_id=self.orig_voice_id, speed=self.speed, profile=self.profile
                 )
                 if audio and not self.is_closed:
                     item.set_orig_audio(audio)
@@ -309,7 +309,7 @@ class ReaderSession:
                     continue
 
                 audio = await TTSService.synthesize_bytes(
-                    item.original, voice_id=self.orig_voice_id, speed=self.speed
+                    item.original, voice_id=self.orig_voice_id, speed=self.speed, profile=self.profile
                 )
                 if audio and not self.is_closed:
                     item.set_orig_audio(audio)
@@ -427,7 +427,7 @@ class ReaderSession:
                 text_to_speak = item.translated
                 item.vi_status = "synthesizing"
                 audio = await TTSService.synthesize_bytes(
-                    text_to_speak, voice_id=self.vi_voice_id, speed=self.speed
+                    text_to_speak, voice_id=self.vi_voice_id, speed=self.speed, profile=self.profile
                 )
                 if audio and not self.is_closed:
                     item.set_vi_audio(audio)
@@ -488,7 +488,7 @@ class ReaderSession:
                     continue
 
                 audio = await TTSService.synthesize_bytes(
-                    item.translated, voice_id=self.vi_voice_id, speed=self.speed
+                    item.translated, voice_id=self.vi_voice_id, speed=self.speed, profile=self.profile
                 )
                 if audio and not self.is_closed:
                     item.set_vi_audio(audio)
@@ -662,7 +662,7 @@ class ReaderSession:
             # Khẩn cấp
             if item.translated:
                 audio = await TTSService.synthesize_bytes(
-                    item.translated, voice_id=self.vi_voice_id, speed=self.speed
+                    item.translated, voice_id=self.vi_voice_id, speed=self.speed, profile=self.profile
                 )
                 if audio:
                     item.set_vi_audio(audio)
